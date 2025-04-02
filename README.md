@@ -1,9 +1,5 @@
 # Rock Paper Scissors DApp
 
-<p align="center">
-<img src="./logo.png" width="500" alt="Rock Paper Scissors DApp">
-</p>
-
 [//]: # (contest-details-open)
 
 ## About the Project
