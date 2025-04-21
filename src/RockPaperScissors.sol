@@ -129,6 +129,7 @@ contract RockPaperScissors {
         require(_timeoutInterval >= 5 minutes, "Timeout must be at least 5 minutes");
 
         // Transfer token to contract
+        // q is there a reason for a safeTransferFrom?
         winningToken.transferFrom(msg.sender, address(this), 1);
 
         uint256 gameId = gameCounter++;
@@ -447,7 +448,7 @@ contract RockPaperScissors {
             game.commitB = bytes32(0);
             game.moveA = Move.None;
             game.moveB = Move.None;
-            game.state = GameState.Committed; // q should be .Created? 
+            game.state = GameState.Committed; // q should this change here?
         } else {
             // End game
             address winner;
