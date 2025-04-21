@@ -1,0 +1,196 @@
+INFO:Detectors:
+Reentrancy in RockPaperScissors.joinGameWithToken(uint256) (src/RockPaperScissors.sol#170-184):
+        External calls:
+        - winningToken.transferFrom(msg.sender,address(this),1) (src/RockPaperScissors.sol#180)
+        State variables written after the call(s):
+        - game.playerB = msg.sender (src/RockPaperScissors.sol#182)
+        RockPaperScissors.games (src/RockPaperScissors.sol#50) can be used in cross function reentrancies:
+        - RockPaperScissors._cancelGame(uint256) (src/RockPaperScissors.sol#550-577)
+        - RockPaperScissors._determineWinner(uint256) (src/RockPaperScissors.sol#416-466)
+        - RockPaperScissors._finishGame(uint256,address) (src/RockPaperScissors.sol#473-506)
+        - RockPaperScissors._handleTie(uint256) (src/RockPaperScissors.sol#512-544)
+        - RockPaperScissors.canTimeoutJoin(uint256) (src/RockPaperScissors.sol#360-364)
+        - RockPaperScissors.canTimeoutReveal(uint256) (src/RockPaperScissors.sol#293-312)
+        - RockPaperScissors.cancelGame(uint256) (src/RockPaperScissors.sol#318-325)
+        - RockPaperScissors.commitMove(uint256,bytes32) (src/RockPaperScissors.sol#191-221)
+        - RockPaperScissors.createGameWithEth(uint256,uint256) (src/RockPaperScissors.sol#96-117)
+        - RockPaperScissors.createGameWithToken(uint256,uint256) (src/RockPaperScissors.sol#124-148)
+        - RockPaperScissors.games (src/RockPaperScissors.sol#50)
+        - RockPaperScissors.joinGameWithEth(uint256) (src/RockPaperScissors.sol#154-164)
+        - RockPaperScissors.joinGameWithToken(uint256) (src/RockPaperScissors.sol#170-184)
+        - RockPaperScissors.revealMove(uint256,uint8,bytes32) (src/RockPaperScissors.sol#229-256)
+        - RockPaperScissors.timeoutJoin(uint256) (src/RockPaperScissors.sol#331-339)
+        - RockPaperScissors.timeoutReveal(uint256) (src/RockPaperScissors.sol#262-285)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#reentrancy-vulnerabilities-1
+INFO:Detectors:
+Reentrancy in RockPaperScissors.createGameWithToken(uint256,uint256) (src/RockPaperScissors.sol#124-148):
+        External calls:
+        - winningToken.transferFrom(msg.sender,address(this),1) (src/RockPaperScissors.sol#131)
+        State variables written after the call(s):
+        - gameId = gameCounter ++ (src/RockPaperScissors.sol#133)
+        - game.playerA = msg.sender (src/RockPaperScissors.sol#136)
+        - game.bet = 0 (src/RockPaperScissors.sol#137)
+        - game.timeoutInterval = _timeoutInterval (src/RockPaperScissors.sol#138)
+        - game.creationTime = block.timestamp (src/RockPaperScissors.sol#139)
+        - game.joinDeadline = block.timestamp + joinTimeout (src/RockPaperScissors.sol#140)
+        - game.totalTurns = _totalTurns (src/RockPaperScissors.sol#141)
+        - game.currentTurn = 1 (src/RockPaperScissors.sol#142)
+        - game.state = GameState.Created (src/RockPaperScissors.sol#143)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#reentrancy-vulnerabilities-2
+INFO:Detectors:
+Reentrancy in RockPaperScissors._cancelGame(uint256) (src/RockPaperScissors.sol#550-577):
+        External calls:
+        - (successA,None) = game.playerA.call{value: game.bet}() (src/RockPaperScissors.sol#557)
+        - (successB,None) = game.playerB.call{value: game.bet}() (src/RockPaperScissors.sol#561)
+        - winningToken.mint(game.playerA,1) (src/RockPaperScissors.sol#569)
+        - winningToken.mint(game.playerB,1) (src/RockPaperScissors.sol#572)
+        External calls sending eth:
+        - (successA,None) = game.playerA.call{value: game.bet}() (src/RockPaperScissors.sol#557)
+        - (successB,None) = game.playerB.call{value: game.bet}() (src/RockPaperScissors.sol#561)
+        Event emitted after the call(s):
+        - GameCancelled(_gameId) (src/RockPaperScissors.sol#576)
+Reentrancy in RockPaperScissors._finishGame(uint256,address) (src/RockPaperScissors.sol#473-506):
+        External calls:
+        - (success,None) = _winner.call{value: prize}() (src/RockPaperScissors.sol#492)
+        - winningToken.mint(_winner,2) (src/RockPaperScissors.sol#499)
+        - winningToken.mint(_winner,1) (src/RockPaperScissors.sol#502)
+        External calls sending eth:
+        - (success,None) = _winner.call{value: prize}() (src/RockPaperScissors.sol#492)
+        Event emitted after the call(s):
+        - GameFinished(_gameId,_winner,prize) (src/RockPaperScissors.sol#505)
+Reentrancy in RockPaperScissors._handleTie(uint256) (src/RockPaperScissors.sol#512-544):
+        External calls:
+        - (successA,None) = game.playerA.call{value: refundPerPlayer}() (src/RockPaperScissors.sol#530)
+        - (successB,None) = game.playerB.call{value: refundPerPlayer}() (src/RockPaperScissors.sol#532)
+        - winningToken.mint(game.playerA,1) (src/RockPaperScissors.sol#538)
+        - winningToken.mint(game.playerB,1) (src/RockPaperScissors.sol#539)
+        External calls sending eth:
+        - (successA,None) = game.playerA.call{value: refundPerPlayer}() (src/RockPaperScissors.sol#530)
+        - (successB,None) = game.playerB.call{value: refundPerPlayer}() (src/RockPaperScissors.sol#532)
+        Event emitted after the call(s):
+        - GameFinished(_gameId,address(0),0) (src/RockPaperScissors.sol#543)
+Reentrancy in RockPaperScissors.createGameWithToken(uint256,uint256) (src/RockPaperScissors.sol#124-148):
+        External calls:
+        - winningToken.transferFrom(msg.sender,address(this),1) (src/RockPaperScissors.sol#131)
+        Event emitted after the call(s):
+        - GameCreated(gameId,msg.sender,0,_totalTurns) (src/RockPaperScissors.sol#145)
+Reentrancy in RockPaperScissors.joinGameWithToken(uint256) (src/RockPaperScissors.sol#170-184):
+        External calls:
+        - winningToken.transferFrom(msg.sender,address(this),1) (src/RockPaperScissors.sol#180)
+        Event emitted after the call(s):
+        - PlayerJoined(_gameId,msg.sender) (src/RockPaperScissors.sol#183)
+Reentrancy in RockPaperScissors.withdrawFees(uint256) (src/RockPaperScissors.sol#397-410):
+        External calls:
+        - (success,None) = adminAddress.call{value: amountToWithdraw}() (src/RockPaperScissors.sol#406)
+        Event emitted after the call(s):
+        - FeeWithdrawn(adminAddress,amountToWithdraw) (src/RockPaperScissors.sol#409)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#reentrancy-vulnerabilities-3
+INFO:Detectors:
+RockPaperScissors.joinGameWithEth(uint256) (src/RockPaperScissors.sol#154-164) uses timestamp for comparisons
+        Dangerous comparisons:
+        - require(bool,string)(block.timestamp <= game.joinDeadline,Join deadline passed) (src/RockPaperScissors.sol#159)
+RockPaperScissors.joinGameWithToken(uint256) (src/RockPaperScissors.sol#170-184) uses timestamp for comparisons
+        Dangerous comparisons:
+        - require(bool,string)(block.timestamp <= game.joinDeadline,Join deadline passed) (src/RockPaperScissors.sol#175)
+RockPaperScissors.commitMove(uint256,bytes32) (src/RockPaperScissors.sol#191-221) uses timestamp for comparisons
+        Dangerous comparisons:
+        - require(bool,string)(msg.sender == game.playerA || msg.sender == game.playerB,Not a player in this game) (src/RockPaperScissors.sol#194)
+        - require(bool,string)(game.state == GameState.Created || game.state == GameState.Committed,Game not in commit phase) (src/RockPaperScissors.sol#195)
+        - require(bool,string)(game.playerB != address(0),Waiting for player B to join) (src/RockPaperScissors.sol#199)
+        - require(bool,string)(game.state == GameState.Committed,Not in commit phase) (src/RockPaperScissors.sol#203)
+        - require(bool,string)(game.moveA == Move.None && game.moveB == Move.None,Moves already committed for this turn) (src/RockPaperScissors.sol#204)
+        - require(bool,string)(game.commitA == bytes32(0),Already committed) (src/RockPaperScissors.sol#208)
+        - require(bool,string)(game.commitB == bytes32(0),Already committed) (src/RockPaperScissors.sol#211)
+RockPaperScissors.revealMove(uint256,uint8,bytes32) (src/RockPaperScissors.sol#229-256) uses timestamp for comparisons
+        Dangerous comparisons:
+        - require(bool,string)(block.timestamp <= game.revealDeadline,Reveal phase timed out) (src/RockPaperScissors.sol#234)
+RockPaperScissors.timeoutReveal(uint256) (src/RockPaperScissors.sol#262-285) uses timestamp for comparisons
+        Dangerous comparisons:
+        - require(bool,string)(block.timestamp > game.revealDeadline,Reveal phase not timed out yet) (src/RockPaperScissors.sol#267)
+RockPaperScissors.canTimeoutReveal(uint256) (src/RockPaperScissors.sol#293-312) uses timestamp for comparisons
+        Dangerous comparisons:
+        - game.state != GameState.Committed || block.timestamp <= game.revealDeadline (src/RockPaperScissors.sol#296)
+RockPaperScissors.timeoutJoin(uint256) (src/RockPaperScissors.sol#331-339) uses timestamp for comparisons
+        Dangerous comparisons:
+        - require(bool,string)(block.timestamp > game.joinDeadline,Join deadline not reached yet) (src/RockPaperScissors.sol#335)
+RockPaperScissors.canTimeoutJoin(uint256) (src/RockPaperScissors.sol#360-364) uses timestamp for comparisons
+        Dangerous comparisons:
+        - (game.state == GameState.Created && block.timestamp > game.joinDeadline && game.playerB == address(0)) (src/RockPaperScissors.sol#363)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#block-timestamp
+INFO:Detectors:
+2 different versions of Solidity are used:
+        - Version constraint ^0.8.20 is used by:
+                -^0.8.20 (lib/openzeppelin-contracts/contracts/access/Ownable.sol#4)
+                -^0.8.20 (lib/openzeppelin-contracts/contracts/interfaces/draft-IERC6093.sol#3)
+                -^0.8.20 (lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol#4)
+                -^0.8.20 (lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol#4)
+                -^0.8.20 (lib/openzeppelin-contracts/contracts/token/ERC20/extensions/ERC20Burnable.sol#4)
+                -^0.8.20 (lib/openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol#4)
+                -^0.8.20 (lib/openzeppelin-contracts/contracts/utils/Context.sol#4)
+        - Version constraint ^0.8.13 is used by:
+                -^0.8.13 (src/Counter.sol#2)
+                -^0.8.13 (src/RockPaperScissors.sol#2)
+                -^0.8.13 (src/WinningToken.sol#2)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#different-pragma-directives-are-used
+INFO:Detectors:
+Version constraint ^0.8.20 contains known severe issues (https://solidity.readthedocs.io/en/latest/bugs.html)
+        - VerbatimInvalidDeduplication
+        - FullInlinerNonExpressionSplitArgumentEvaluationOrder
+        - MissingSideEffectsOnSelectorAccess.
+It is used by:
+        - ^0.8.20 (lib/openzeppelin-contracts/contracts/access/Ownable.sol#4)
+        - ^0.8.20 (lib/openzeppelin-contracts/contracts/interfaces/draft-IERC6093.sol#3)
+        - ^0.8.20 (lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol#4)
+        - ^0.8.20 (lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol#4)
+        - ^0.8.20 (lib/openzeppelin-contracts/contracts/token/ERC20/extensions/ERC20Burnable.sol#4)
+        - ^0.8.20 (lib/openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol#4)
+        - ^0.8.20 (lib/openzeppelin-contracts/contracts/utils/Context.sol#4)
+Version constraint ^0.8.13 contains known severe issues (https://solidity.readthedocs.io/en/latest/bugs.html)
+        - VerbatimInvalidDeduplication
+        - FullInlinerNonExpressionSplitArgumentEvaluationOrder
+        - MissingSideEffectsOnSelectorAccess
+        - StorageWriteRemovalBeforeConditionalTermination
+        - AbiReencodingHeadOverflowWithStaticArrayCleanup
+        - DirtyBytesArrayToStorage
+        - InlineAssemblyMemorySideEffects
+        - DataLocationChangeInInternalOverride
+        - NestedCalldataArrayAbiReencodingSizeValidation.
+It is used by:
+        - ^0.8.13 (src/Counter.sol#2)
+        - ^0.8.13 (src/RockPaperScissors.sol#2)
+        - ^0.8.13 (src/WinningToken.sol#2)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#incorrect-versions-of-solidity
+INFO:Detectors:
+Low level call in RockPaperScissors.withdrawFees(uint256) (src/RockPaperScissors.sol#397-410):
+        - (success,None) = adminAddress.call{value: amountToWithdraw}() (src/RockPaperScissors.sol#406)
+Low level call in RockPaperScissors._finishGame(uint256,address) (src/RockPaperScissors.sol#473-506):
+        - (success,None) = _winner.call{value: prize}() (src/RockPaperScissors.sol#492)
+Low level call in RockPaperScissors._handleTie(uint256) (src/RockPaperScissors.sol#512-544):
+        - (successA,None) = game.playerA.call{value: refundPerPlayer}() (src/RockPaperScissors.sol#530)
+        - (successB,None) = game.playerB.call{value: refundPerPlayer}() (src/RockPaperScissors.sol#532)
+Low level call in RockPaperScissors._cancelGame(uint256) (src/RockPaperScissors.sol#550-577):
+        - (successA,None) = game.playerA.call{value: game.bet}() (src/RockPaperScissors.sol#557)
+        - (successB,None) = game.playerB.call{value: game.bet}() (src/RockPaperScissors.sol#561)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#low-level-calls
+INFO:Detectors:
+Parameter RockPaperScissors.createGameWithEth(uint256,uint256)._totalTurns (src/RockPaperScissors.sol#96) is not in mixedCase
+Parameter RockPaperScissors.createGameWithEth(uint256,uint256)._timeoutInterval (src/RockPaperScissors.sol#96) is not in mixedCase
+Parameter RockPaperScissors.createGameWithToken(uint256,uint256)._totalTurns (src/RockPaperScissors.sol#124) is not in mixedCase
+Parameter RockPaperScissors.createGameWithToken(uint256,uint256)._timeoutInterval (src/RockPaperScissors.sol#124) is not in mixedCase
+Parameter RockPaperScissors.joinGameWithEth(uint256)._gameId (src/RockPaperScissors.sol#154) is not in mixedCase
+Parameter RockPaperScissors.joinGameWithToken(uint256)._gameId (src/RockPaperScissors.sol#170) is not in mixedCase
+Parameter RockPaperScissors.commitMove(uint256,bytes32)._gameId (src/RockPaperScissors.sol#191) is not in mixedCase
+Parameter RockPaperScissors.commitMove(uint256,bytes32)._commitHash (src/RockPaperScissors.sol#191) is not in mixedCase
+Parameter RockPaperScissors.revealMove(uint256,uint8,bytes32)._gameId (src/RockPaperScissors.sol#229) is not in mixedCase
+Parameter RockPaperScissors.revealMove(uint256,uint8,bytes32)._move (src/RockPaperScissors.sol#229) is not in mixedCase
+Parameter RockPaperScissors.revealMove(uint256,uint8,bytes32)._salt (src/RockPaperScissors.sol#229) is not in mixedCase
+Parameter RockPaperScissors.timeoutReveal(uint256)._gameId (src/RockPaperScissors.sol#262) is not in mixedCase
+Parameter RockPaperScissors.canTimeoutReveal(uint256)._gameId (src/RockPaperScissors.sol#293) is not in mixedCase
+Parameter RockPaperScissors.cancelGame(uint256)._gameId (src/RockPaperScissors.sol#318) is not in mixedCase
+Parameter RockPaperScissors.timeoutJoin(uint256)._gameId (src/RockPaperScissors.sol#331) is not in mixedCase
+Parameter RockPaperScissors.setJoinTimeout(uint256)._newTimeout (src/RockPaperScissors.sol#345) is not in mixedCase
+Parameter RockPaperScissors.canTimeoutJoin(uint256)._gameId (src/RockPaperScissors.sol#360) is not in mixedCase
+Parameter RockPaperScissors.setAdmin(address)._newAdmin (src/RockPaperScissors.sol#386) is not in mixedCase
+Parameter RockPaperScissors.withdrawFees(uint256)._amount (src/RockPaperScissors.sol#397) is not in mixedCase
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#conformance-to-solidity-naming-conventions
+INFO:Slither:. analyzed (12 contracts with 100 detectors), 44 result(s) found

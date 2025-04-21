@@ -26,6 +26,7 @@ contract RockPaperScissors {
         Cancelled
     }
 
+    // a: re-order to pack and compile??
     // Game structure
     struct Game {
         address playerA; // Creator of the game
