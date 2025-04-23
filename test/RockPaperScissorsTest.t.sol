@@ -5,6 +5,23 @@ import "forge-std/Test.sol";
 import "../src/RockPaperScissors.sol";
 import "../src/WinningToken.sol";
 
+contract Reenter {
+    RockPaperScissors public game;
+    uint256 public gameId;
+
+    constructor(address payable _game, uint256 _betAmount, uint256 _timeout, uint256 _totalTurns) payable {
+        game = RockPaperScissors(_game);
+        gameId = game.createGameWithEth{value: _betAmount}(_totalTurns, _timeout);
+    }
+
+    fallback() external payable {
+        bytes memory data = abi.encodeWithSignature("cancelGame(uint256)", gameId);
+        if (msg.sender.balance > msg.value) {
+            (msg.sender).call(data);
+        }
+    }
+}
+
 contract RockPaperScissorsTest is Test {
     // Events for testing
     event GameCreated(uint256 indexed gameId, address indexed creator, uint256 bet, uint256 totalTurns);
@@ -58,6 +75,60 @@ contract RockPaperScissorsTest is Test {
 
         vm.prank(address(game));
         token.mint(playerB, 10);
+    }
+
+    
+    // Test cancelGame against reentrancy
+    function testReentrancyCancel() public {
+        vm.deal(address(game), 10 ether); 
+        Reenter reenter = (new Reenter){value: BET_AMOUNT}(payable(game), BET_AMOUNT, TIMEOUT, TOTAL_TURNS);
+
+        assertEq(address(reenter).balance, 0);
+
+        // Join the game
+        console.log(address(playerB).balance);
+        vm.startPrank(playerB);        
+        game.joinGameWithEth{value: BET_AMOUNT}(gameId);
+        vm.stopPrank();
+        console.log(address(playerB).balance);
+
+        // Verify game details
+        (
+            address storedPlayerA,
+            address storedPlayerB,
+            uint256 bet,
+            uint256 timeoutInterval,
+            ,
+            ,
+            ,
+            uint256 totalTurns,
+            uint256 currentTurn,
+            ,
+            ,
+            ,
+            ,
+            ,
+            ,
+            RockPaperScissors.GameState state
+        ) = game.games(gameId);
+
+        assertEq(storedPlayerA, address(reenter));
+        assertEq(storedPlayerB, playerB);
+        assertEq(bet, BET_AMOUNT);
+        assertEq(timeoutInterval, TIMEOUT);
+        assertEq(totalTurns, TOTAL_TURNS);
+        assertEq(currentTurn, 1);
+        assertEq(uint256(state), uint256(RockPaperScissors.GameState.Created));
+
+        // Try to cancel game using reentrancy
+        vm.prank(payable(reenter));
+        game.cancelGame(gameId);
+
+        // assertGt(address(reenter).balance, 9 ether);
+        assertEq(address(reenter).balance, BET_AMOUNT);
+        // console.log(address(game).balance);
+        // console.log(address(reenter).balance);
+        console.log(address(playerB).balance);
     }
 
     // ==================== GAME CREATION TESTS ====================

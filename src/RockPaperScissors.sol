@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.13; // a: limit to single version
+pragma solidity ^0.8.13;
 
 import "./WinningToken.sol";
 
@@ -25,8 +25,7 @@ contract RockPaperScissors {
         Finished,
         Cancelled
     }
-
-    // a: re-order to pack and compile??
+    
     // Game structure
     struct Game {
         address playerA; // Creator of the game
@@ -129,7 +128,6 @@ contract RockPaperScissors {
         require(_timeoutInterval >= 5 minutes, "Timeout must be at least 5 minutes");
 
         // Transfer token to contract
-        // q is there a reason for a safeTransferFrom?
         winningToken.transferFrom(msg.sender, address(this), 1);
 
         uint256 gameId = gameCounter++;
@@ -266,7 +264,7 @@ contract RockPaperScissors {
 
         require(msg.sender == game.playerA || msg.sender == game.playerB, "Not a player in this game");
         require(game.state == GameState.Committed, "Game not in reveal phase");
-        require(block.timestamp > game.revealDeadline, "Reveal phase not timed out yet"); // a should be >=
+        require(block.timestamp > game.revealDeadline, "Reveal phase not timed out yet");
 
         // If player calling timeout has revealed but opponent hasn't, they win
         bool playerARevealed = game.moveA != Move.None;
@@ -399,7 +397,6 @@ contract RockPaperScissors {
     function withdrawFees(uint256 _amount) external {
         require(msg.sender == adminAddress, "Only admin can withdraw fees");
 
-        // n: accumulatedFees will be 0, so this '_amount == 0' works, then the require
         uint256 amountToWithdraw = _amount == 0 ? accumulatedFees : _amount;
         require(amountToWithdraw <= accumulatedFees, "Insufficient fee balance");
 
@@ -448,7 +445,7 @@ contract RockPaperScissors {
             game.commitB = bytes32(0);
             game.moveA = Move.None;
             game.moveB = Move.None;
-            game.state = GameState.Committed; // q should this change here?
+            game.state = GameState.Committed;
         } else {
             // End game
             address winner;
@@ -459,7 +456,7 @@ contract RockPaperScissors {
             } else {
                 // This should never happen with odd turns, but just in case
                 // of timeouts or other unusual scenarios, handle as a tie
-                _handleTie(_gameId); // q be sure this calls _finishGame
+                _handleTie(_gameId);
                 return;
             }
 
@@ -467,6 +464,10 @@ contract RockPaperScissors {
         }
     }
 
+    // call order:
+    //              revealMove
+    //              _determineWinner
+    //              _finishGame
     /**
      * @dev Internal function to finish the game and distribute prizes
      * @param _gameId ID of the game
@@ -476,6 +477,7 @@ contract RockPaperScissors {
         Game storage game = games[_gameId];
 
         game.state = GameState.Finished;
+
 
         uint256 prize = 0;
 
@@ -512,7 +514,6 @@ contract RockPaperScissors {
      * @param _gameId ID of the game
      */
     function _handleTie(uint256 _gameId) internal {
-        // a should call _finishGame
         Game storage game = games[_gameId];
 
         game.state = GameState.Finished;
@@ -531,6 +532,7 @@ contract RockPaperScissors {
             // Refund both players
             (bool successA,) = game.playerA.call{value: refundPerPlayer}("");
             // a: test attack via fallback here so that playerA gets all funds
+            // n: game state getting set above is preventing my attack from draining funds
             (bool successB,) = game.playerB.call{value: refundPerPlayer}("");
             require(successA && successB, "Transfer failed");
         }
@@ -558,7 +560,7 @@ contract RockPaperScissors {
         if (game.bet > 0) {
             (bool successA,) = game.playerA.call{value: game.bet}("");
             require(successA, "Transfer to player A failed");
-            // a: attack here
+            // a: attack here (reentrancy)
             if (game.playerB != address(0)) {
                 (bool successB,) = game.playerB.call{value: game.bet}("");
                 require(successB, "Transfer to player B failed");
